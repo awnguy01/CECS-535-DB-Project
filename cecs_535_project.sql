@@ -142,3 +142,34 @@ VALUES
 	(0003928401923, 2019, 8, 13),
 	(0004720192841, 2019, 7, 18),
 	(0004720192841, 2019, 8, 15);
+DELIMITER $$
+CREATE TRIGGER update_inventory
+	BEFORE INSERT ON Sales
+    FOR EACH ROW
+    BEGIN
+		IF (SELECT qty_in_stock FROM Books WHERE Books.isbn = NEW.isbn) <= 0
+			THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'ERROR: Not enough quantity in stock to make sale';
+		ELSE
+		UPDATE Books
+			SET qty_in_stock = GREATEST(qty_in_stock - NEW.number, 0)
+			WHERE Books.isbn = NEW.isbn;
+		END IF;
+    END;
+$$
+DELIMITER ;
+CREATE TABLE Royalties (
+	author_id INT,
+    amount FLOAT,
+    PRIMARY KEY (author_id),
+    FOREIGN KEY (author_id) REFERENCES Author
+);
+INSERT INTO Royalties
+	(author_id, amount)
+VALUES
+    SELECT discount, price, author_id, commission, number
+		FROM Publisher, Books, Author, Writes, Sales
+        WHERE Publisher.publisherid = Books.publisherid 
+			AND Books.isbn = Writes.isbn
+            AND Writes.author_id = Author.author_id
+			AND Sales.isbn = Books.isbn
+		GROUP BY author_id
